@@ -12,11 +12,17 @@ custom-date-smt jar and other dependency jar and files will be created in the cu
 you should zip the custom-date-smt folder under the working directory.
 
 ### Docker Build
-Check the docker-compose.yml file before proceed the build. There are environment variables that need 
+Check the docker-compose.yml file before proceed the build. There are variables that need 
 to be correct before deployment.
 
+```shell
+curl --retry 3 -o  repo https://codeload.github.com/PeerIslands/kafkatransforms/tar.gz/refs/tags/tag_v1
+        tar -xf repo
+        cd kafkatransforms-tag_v1/custom-smt-module
+        cp -r custom-smt/   /usr/share/confluent-hub-components
+```
 ## Note
-If you're done any modification please update custom-date-smt.zip file and commit it. because it's used in docker compose file.
+If you want the latest changes , you have to create the tag in github and use that tag version in the above curl url, and the repo name on the command eg: kafkatransforms-${tag_version} 
 
 
 

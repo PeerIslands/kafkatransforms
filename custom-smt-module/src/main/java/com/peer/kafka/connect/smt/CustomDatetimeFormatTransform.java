@@ -1,114 +1,95 @@
 package com.peer.kafka.connect.smt;
 
 import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.transforms.Transformation;
+import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.transforms.util.SimpleConfig;
 
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 public class CustomDatetimeFormatTransform<R extends ConnectRecord<R>> implements Transformation<R> {
 
-    public static final String FIELD_CONFIG = "field";
-    public static final String TARGET_TYPE_CONFIG = "targetType";
+    private static final String FIELD_NAME_CONFIG = "field.name";
+    private static final String TARGET_TYPE_CONFIG = "target.type";
+    private static final String DEFAULT_TARGET_TYPE = "timestamp";
+    private static final List<String> DEFAULT_DATE_FORMATS = Arrays.asList(
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSSS'Z'"
+    );
 
     private String fieldName;
     private String targetType;
-    private DateTimeFormatter dateTimeFormatter;
+    private List<DateFormat> dateFormats;
 
     @Override
     public R apply(R record) {
-        Map<String, Object> value = (Map<String, Object>) record.value();
-        Object fieldValue = value.get(fieldName);
-        if (fieldValue == null) {
-            return record;
-        }
-
-        if (!(fieldValue instanceof String)) {
-            throw new DataException("Field value is not a string: " + fieldValue);
-        }
-
-        String dateTimeString = (String) fieldValue;
-
-        try {
-            Object convertedValue;
-
-            switch (targetType.toLowerCase()) {
-                case "timestamp":
-                    Instant instant = Instant.parse(dateTimeString);
-                    //convertedValue = Date.from(instant);
-                    convertedValue = instant.toEpochMilli();
-                    break;
-                // Add more cases for other target types as needed
-
-                default:
-                    throw new ConfigException("Unsupported target type: " + targetType);
+        Object value = record.value();
+        if (value instanceof Map) {
+            Map<String, Object> valueMap = (Map<String, Object>) value;
+            Object fieldValue = valueMap.get(fieldName);
+            if (fieldValue instanceof String) {
+                String strFieldValue = (String) fieldValue;
+                for (DateFormat dateFormat : dateFormats) {
+                    try {
+                        Date parsedDate = dateFormat.parse(strFieldValue);
+                        if (targetType.toLowerCase().equals("timestamp")) {
+                            valueMap.put(fieldName, parsedDate.getTime());
+                        } else if (targetType.toLowerCase().equals("string")) {
+                            valueMap.put(fieldName, parsedDate.toString());
+                        }
+                        return record;
+                    } catch (ParseException e) {
+                        // Ignore and try the next format
+                    }
+                }
+                // Failed to parse datetime using all formats
+                throw new DataException("Failed to parse datetime field: " + fieldName);
             }
-
-            value.put(fieldName, convertedValue);
-            return record.newRecord(
-                    record.topic(),
-                    record.kafkaPartition(),
-                    record.keySchema(),
-                    record.key(),
-                    record.valueSchema(),
-                    value,
-                    record.timestamp()
-            );
-        } catch (DateTimeParseException e) {
-            throw new DataException("Error parsing datetime string: " + dateTimeString, e);
         }
+        return record;
     }
 
     @Override
     public ConfigDef config() {
         return new ConfigDef()
-                .define(FIELD_CONFIG, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE,
-                        ConfigDef.Importance.HIGH, "Field name to convert")
-                .define(TARGET_TYPE_CONFIG, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE,
-                        ConfigDef.Importance.HIGH, "Target type to convert to");
+                .define(FIELD_NAME_CONFIG, ConfigDef.Type.STRING, ConfigDef.Importance.HIGH,
+                        "The name of the field containing the datetime value")
+                .define(TARGET_TYPE_CONFIG, ConfigDef.Type.STRING, DEFAULT_TARGET_TYPE, ConfigDef.Importance.MEDIUM,
+                        "The target type to convert the datetime value to ('timestamp' or 'string')");
     }
 
     @Override
-    public void configure(Map<String, ?> props) {
-        SimpleConfig config = new SimpleConfig(config(), props);
-        fieldName = config.getString(FIELD_CONFIG);
+    public void configure(Map<String, ?> configs) {
+        SimpleConfig config = new SimpleConfig(config(), configs);
+        fieldName = config.getString(FIELD_NAME_CONFIG);
         targetType = config.getString(TARGET_TYPE_CONFIG);
-
-        dateTimeFormatter = DateTimeFormatter.ISO_INSTANT;
+        dateFormats = new ArrayList<>();
+        for (String format : DEFAULT_DATE_FORMATS) {
+            dateFormats.add(new SimpleDateFormat(format));
+        }
     }
 
     @Override
     public void close() {
-        // No resources to release
+        // No-op
     }
 
-    public R newRecord(R record, Object value) {
-        return apply(record.newRecord(
-                record.topic(),
-                record.kafkaPartition(),
-                record.keySchema(),
-                record.key(),
-                record.valueSchema(),
-                value,
-                record.timestamp()
-        ));
+    //@Override
+    public void configure(Map<String, ?> configs, boolean isKey) {
+        configure(configs);
     }
 
-    public boolean preservesHeaders() {
-        return true;
+    //@Override
+    public Schema outputSchema(Schema inputSchema) {
+        SchemaBuilder builder = SchemaBuilder.type(inputSchema.type());
+        builder.optional();
+        return builder.build();
     }
 }

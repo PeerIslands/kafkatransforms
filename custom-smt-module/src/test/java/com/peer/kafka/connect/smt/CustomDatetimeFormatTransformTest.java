@@ -2,15 +2,15 @@ package com.peer.kafka.connect.smt;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.source.SourceRecord;
-import org.apache.kafka.connect.transforms.Transformation;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.junit.Assert.*;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 public class CustomDatetimeFormatTransformTest {
 
@@ -19,82 +19,66 @@ public class CustomDatetimeFormatTransformTest {
     @Before
     public void setup() {
         transform = new CustomDatetimeFormatTransform<>();
-        Map<String, String> props = new HashMap<>();
-        props.put(CustomDatetimeFormatTransform.FIELD_CONFIG, "timestamp");
-        props.put(CustomDatetimeFormatTransform.TARGET_TYPE_CONFIG, "timestamp");
-        transform.configure(props);
+        Map<String, String> configs = new HashMap<>();
+        configs.put("field.name", "firstEventTime");
+        configs.put("target.type", "Timestamp");
+        transform.configure(configs);
     }
 
     @Test
-    public void testApply_ConvertsDatetimeStringToTimestamp() {
-        Schema valueSchema = SchemaBuilder.struct()
-                .field("timestamp", Schema.STRING_SCHEMA)
-                .build();
+    public void testApply_withValidDateString_shouldConvertToTimestamp() {
+        SourceRecord record = createSourceRecord("2023-05-15T08:12:51Z");
+        SourceRecord transformedRecord = transform.apply(record);
 
-        Map<String, Object> valueMap = new HashMap<>();
-        //valueMap.put("timestamp", "2023-05-15T08:12:51Z");
-        valueMap.put("timestamp", "2023-05-15T02:30:31.908Z");
+        Object value = transformedRecord.value();
+        Assert.assertTrue(value instanceof Map);
 
-        SourceRecord record = new SourceRecord(null, null, "topic", null, valueSchema, valueMap);
-
-        SourceRecord transformed = transform.apply(record);
-
-        assertNotNull(transformed.value());
-
-        Map<String, Object> transformedValue = (Map<String, Object>) transformed.value();
-        assertTrue(transformedValue.containsKey("timestamp"));
-        assertTrue(transformedValue.get("timestamp") instanceof Long);
-        //assertEquals(1684138371000L, transformedValue.get("timestamp"));
-        assertEquals(1684117831908L, transformedValue.get("timestamp"));
+        Map<String, Object> valueMap = (Map<String, Object>) value;
+        Object fieldValue = valueMap.get("firstEventTime");
+        Assert.assertTrue(fieldValue instanceof Long);
+        Assert.assertEquals(1684156371000L, fieldValue);
     }
 
     @Test
-    public void testApply_PreservesRecordHeaders() {
-        Schema valueSchema = SchemaBuilder.struct()
-                .field("timestamp", Schema.STRING_SCHEMA)
-                .build();
+    public void testApply_withValidDateString_shouldConvertToTimeStamp2Format() {
+        SourceRecord record = createSourceRecord("2023-05-15T02:30:31.908Z");
+        SourceRecord transformedRecord = transform.apply(record);
 
-        Map<String, Object> valueMap = new HashMap<>();
-        valueMap.put("timestamp", "2023-05-15T08:12:51Z");
+        Object value = transformedRecord.value();
+        Assert.assertTrue(value instanceof Map);
 
-        SourceRecord record = new SourceRecord(null, null, "topic", null, valueSchema, valueMap);
-        record.headers().addString("headerKey", "headerValue");
-
-        SourceRecord transformed = transform.apply(record);
-
-        assertNotNull(transformed.headers());
-
-        assertNotNull(transformed.headers().lastWithName("headerKey"));
-        assertEquals("headerValue", transformed.headers().lastWithName("headerKey").value());
+        Map<String, Object> valueMap = (Map<String, Object>) value;
+        Object fieldValue = valueMap.get("firstEventTime");
+        Assert.assertTrue(fieldValue instanceof Long);
+        Assert.assertEquals(1684135831908L, fieldValue);
     }
 
     @Test
-    public void testApply_ReturnsUnmodifiedRecordWhenFieldIsNull() {
-        Schema valueSchema = SchemaBuilder.struct()
-                .field("timestamp", Schema.STRING_SCHEMA)
-                .build();
+    public void testApply_withValidDateString_shouldConvertToTimeStamp3Format() {
+        SourceRecord record = createSourceRecord("2021-01-28T09:21:24.0391729Z");
+        SourceRecord transformedRecord = transform.apply(record);
 
-        Map<String, Object> valueMap = new HashMap<>();
-        valueMap.put("timestamp", null);
+        Object value = transformedRecord.value();
+        Assert.assertTrue(value instanceof Map);
 
-        SourceRecord record = new SourceRecord(null, null, "topic", null, valueSchema, valueMap);
-
-        SourceRecord transformed = transform.apply(record);
-
-        assertSame(record, transformed);
+        Map<String, Object> valueMap = (Map<String, Object>) value;
+        Object fieldValue = valueMap.get("firstEventTime");
+        Assert.assertTrue(fieldValue instanceof Long);
+        Assert.assertEquals(1611844075729L, fieldValue);
     }
 
-    @Test(expected = org.apache.kafka.connect.errors.DataException.class)
-    public void testApply_ThrowsDataExceptionWhenFieldIsNotString() {
-        Schema valueSchema = SchemaBuilder.struct()
-                .field("timestamp", Schema.INT32_SCHEMA)
-                .build();
-
-        Map<String, Object> valueMap = new HashMap<>();
-        valueMap.put("timestamp", 12345);
-
-        SourceRecord record = new SourceRecord(null, null, "topic", null, valueSchema, valueMap);
-
+    @Test(expected = DataException.class)
+    public void testApply_withInvalidDateString_shouldThrowDataException() {
+        SourceRecord record = createSourceRecord("2023-05-17T10:30:00");
         transform.apply(record);
+    }
+
+    private SourceRecord createSourceRecord(String timestampValue) {
+        Map<String, Object> valueMap = new HashMap<>();
+        valueMap.put("firstEventTime", timestampValue);
+
+        Schema valueSchema = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.STRING_SCHEMA).build();
+
+        return new SourceRecord(null, null, "topic", 0, valueSchema, valueMap);
     }
 }

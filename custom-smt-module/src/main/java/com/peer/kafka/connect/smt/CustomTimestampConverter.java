@@ -1,11 +1,10 @@
 package com.peer.kafka.connect.smt;
-
+import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.connect.transforms.Transformation;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.connector.ConnectRecord;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.transforms.Transformation;
+import org.apache.kafka.connect.transforms.util.SimpleConfig;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -13,67 +12,92 @@ import java.util.Date;
 import java.util.Map;
 
 public class CustomTimestampConverter<R extends ConnectRecord<R>> implements Transformation<R> {
-    private static final String TARGET_TYPE = "Timestamp";
-    private static final String FIELD_NAME = "timestamp";
+
+    private static final String FIELD_CONFIG = "field";
+    private static final String TARGET_TYPE_CONFIG = "target.type";
+    private static final String DATE_FORMATS_CONFIG = "date.formats";
+
+    private String fieldName;
+    private String targetType;
+    private String[] dateFormats;
+
+//    @Override
+//    public void configure(Map<String, ?> configs) {
+//        final SimpleConfig config = new SimpleConfig(ConfigDef(), configs);
+//        fieldName = config.getString(FIELD_CONFIG);
+//        targetType = config.getString(TARGET_TYPE_CONFIG);
+//        dateFormats = config.getString(DATE_FORMATS_CONFIG).split(",");
+//    }
 
     @Override
     public void configure(Map<String, ?> configs) {
-        // Configuration, if any
+        fieldName = (String) configs.get("field");
+        targetType = (String) configs.get("target.type");
+        dateFormats = ((String) configs.get("date.formats")).split(",");
     }
 
     @Override
     public R apply(R record) {
         Object value = record.value();
-        if (value instanceof Struct) {
-            Struct struct = (Struct) value;
-            if (struct.schema().field(FIELD_NAME) != null) {
-                Object fieldValue = struct.get(FIELD_NAME);
-                if (fieldValue instanceof String) {
-                    String datetimeString = (String) fieldValue;
-                    Date convertedDate = convertDatetime(datetimeString);
-                    if (convertedDate != null) {
-                        struct.put(FIELD_NAME, convertedDate);
+
+        if (value != null && value instanceof Map) {
+            Map<String, Object> valueMap = (Map<String, Object>) value;
+            Object fieldValue = valueMap.get(fieldName);
+
+            if (fieldValue != null && fieldValue instanceof String) {
+                String dateString = (String) fieldValue;
+                for (String dateFormat : dateFormats) {
+                    try {
+
+                        Object transformedValue = convertToTargetType(dateString, targetType, dateFormat);
+
+                        valueMap.put(fieldName, transformedValue);
+                        break;
+                    } catch (Exception e) {
+
                     }
                 }
             }
         }
-        return record;
+
+        return record.newRecord(
+                record.topic(),
+                record.kafkaPartition(),
+                record.keySchema(),
+                record.key(),
+                record.valueSchema(),
+                record.value(),
+                record.timestamp(),
+                record.headers()
+        );
     }
 
-    private Date convertDatetime(String datetimeString) {
-        SimpleDateFormat[] formats = {
-                new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ"),
-                new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.'Z'"),
-                new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSZ")
-        };
-        for (SimpleDateFormat format : formats) {
-            try {
-                return format.parse(datetimeString);
-            } catch (ParseException e) {
-                // Ignore parsing errors and try the next format
-            }
+    private Object convertToTargetType(String dateString, String targetType, String dateFormat) throws ParseException {
+        SimpleDateFormat sdf = new SimpleDateFormat(dateFormat);
+        Date date = sdf.parse(dateString);
+
+        switch (targetType) {
+            case "Timestamp":
+                return new java.sql.Timestamp(date.getTime());
+            case "Date":
+                return date;
+            case "Unix":
+                return date.getTime();
+            default:
+                throw new IllegalArgumentException("Unsupported target type: " + targetType);
         }
-        // If none of the formats match, handle the error or return null
-        return null;
-    }
-
-    @Override
-    public void close() {
-        // Clean up resources, if any
     }
 
     @Override
     public ConfigDef config() {
-        return new ConfigDef();
+        return new ConfigDef()
+                .define(FIELD_CONFIG, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.HIGH, "Field name to transform")
+                .define(TARGET_TYPE_CONFIG, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.HIGH, "Target type for conversion")
+                .define(DATE_FORMATS_CONFIG, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.HIGH, "Comma-separated date formats");
     }
 
-    //@Override
-    public R getNewRecord(R record) {
-        return record;
-    }
-
-    //@Override
-    public boolean preserveSchema() {
-        return true;
+    @Override
+    public void close() {
+        // Close any resources if needed
     }
 }

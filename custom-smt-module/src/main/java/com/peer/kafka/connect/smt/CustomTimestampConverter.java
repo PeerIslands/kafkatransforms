@@ -6,10 +6,13 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.transforms.Transformation;
 import org.apache.kafka.connect.transforms.util.SimpleConfig;
 
+import java.sql.Timestamp;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
 import java.util.Date;
 import java.util.Map;
+import java.util.TimeZone;
 
 public class CustomTimestampConverter<R extends ConnectRecord<R>> implements Transformation<R> {
 
@@ -20,14 +23,6 @@ public class CustomTimestampConverter<R extends ConnectRecord<R>> implements Tra
     private String fieldName;
     private String targetType;
     private String[] dateFormats;
-
-//    @Override
-//    public void configure(Map<String, ?> configs) {
-//        final SimpleConfig config = new SimpleConfig(ConfigDef(), configs);
-//        fieldName = config.getString(FIELD_CONFIG);
-//        targetType = config.getString(TARGET_TYPE_CONFIG);
-//        dateFormats = config.getString(DATE_FORMATS_CONFIG).split(",");
-//    }
 
     @Override
     public void configure(Map<String, ?> configs) {
@@ -74,11 +69,12 @@ public class CustomTimestampConverter<R extends ConnectRecord<R>> implements Tra
 
     private Object convertToTargetType(String dateString, String targetType, String dateFormat) throws ParseException {
         SimpleDateFormat sdf = new SimpleDateFormat(dateFormat);
+        sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
         Date date = sdf.parse(dateString);
 
         switch (targetType) {
             case "Timestamp":
-                return new java.sql.Timestamp(date.getTime());
+               return new java.sql.Timestamp(date.getTime());
             case "Date":
                 return date;
             case "Unix":

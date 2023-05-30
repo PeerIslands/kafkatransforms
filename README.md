@@ -18,8 +18,18 @@ You should create the release tag and use it in the docker compose file for ever
 ```
 
 ### Docker Build
-Check the docker-compose.yml file before proceed the build. There are steps to download the above tar file and unzip and move to connect container
 
+Check the docker-compose.yml file before proceed the build. There are variables that need 
+to be correct before deployment.
+
+```shell
+curl --retry 3 -o  repo https://codeload.github.com/PeerIslands/kafkatransforms/tar.gz/refs/tags/tag_v1
+        tar -xf repo
+        cd kafkatransforms-tag_v1/custom-smt-module
+        cp -r custom-smt/   /usr/share/confluent-hub-components
+```
+## Note
+If you want the latest changes , you have to create the tag in github and use that tag version in the above curl url, and the repo name on the command eg: kafkatransforms-${tag_version} 
 
 
 

@@ -1,15 +1,10 @@
 package com.peer.kafka.connect.smt;
-import org.apache.kafka.common.config.AbstractConfig;
+
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.connector.ConnectRecord;
-import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.transforms.Transformation;
-import org.apache.kafka.connect.transforms.util.SimpleConfig;
-
-import java.sql.Timestamp;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.time.Instant;
 import java.util.Date;
 import java.util.Map;
 import java.util.TimeZone;
@@ -63,33 +58,53 @@ public class CustomTimestampConverter<R extends ConnectRecord<R>> implements Tra
                 record.valueSchema(),
                 record.value(),
                 record.timestamp(),
-                record.headers()
-        );
+                record.headers());
     }
 
     private Object convertToTargetType(String dateString, String targetType, String dateFormat) throws ParseException {
-        SimpleDateFormat sdf = new SimpleDateFormat(dateFormat);
-        sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
-        Date date = sdf.parse(dateString);
+        Date date = null;
+
+        if (!dateFormat.equals("TimestampUTC")) {
+            SimpleDateFormat sdf = new SimpleDateFormat(dateFormat);
+            sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+            date = sdf.parse(dateString);
+        }
 
         switch (targetType) {
             case "Timestamp":
-               return new java.sql.Timestamp(date.getTime());
+                return new java.sql.Timestamp(date.getTime());
             case "Date":
                 return date;
             case "Unix":
                 return date.getTime();
+            case "TimestampUTC":
+                return convertTimestamp(dateString);
             default:
                 throw new IllegalArgumentException("Unsupported target type: " + targetType);
+        }
+    }
+
+    private static java.util.Date convertTimestamp(String cosmosTimestamp) {
+        try {
+            // Parse the string to an Instant
+            java.time.Instant instant = java.time.Instant.parse(cosmosTimestamp);
+            // Convert the Instant to a Date
+            return java.util.Date.from(instant);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
         }
     }
 
     @Override
     public ConfigDef config() {
         return new ConfigDef()
-                .define(FIELD_CONFIG, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.HIGH, "Field name to transform")
-                .define(TARGET_TYPE_CONFIG, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.HIGH, "Target type for conversion")
-                .define(DATE_FORMATS_CONFIG, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.HIGH, "Comma-separated date formats");
+                .define(FIELD_CONFIG, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.HIGH,
+                        "Field name to transform")
+                .define(TARGET_TYPE_CONFIG, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE,
+                        ConfigDef.Importance.HIGH, "Target type for conversion")
+                .define(DATE_FORMATS_CONFIG, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE,
+                        ConfigDef.Importance.HIGH, "Comma-separated date formats");
     }
 
     @Override

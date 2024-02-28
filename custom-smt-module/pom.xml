@@ -56,4 +56,40 @@
             </plugin>
         </plugins>
     </build>
+    <dependencies>
+    <!-- Kafka Clients -->
+    <dependency>
+        <groupId>org.apache.kafka</groupId>
+        <artifactId>kafka-clients</artifactId>
+        <version>3.1.0</version> <!-- Use the latest version applicable to your setup -->
+    </dependency>
+    
+    <!-- MongoDB Java Driver -->
+    <dependency>
+        <groupId>org.mongodb</groupId>
+        <artifactId>mongodb-driver-sync</artifactId>
+        <version>4.4.0</version> <!-- Use the latest version applicable to your setup -->
+    </dependency>
+    
+    <!-- Bson library, needed for working with MongoDB documents -->
+    <dependency>
+        <groupId>org.mongodb</groupId>
+        <artifactId>bson</artifactId>
+        <version>4.4.0</version> <!-- This should match the version of the MongoDB driver -->
+    </dependency>
+    
+    <!-- Logging Dependencies -->
+    <!-- SLF4J API -->
+    <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-api</artifactId>
+        <version>1.7.32</version> <!-- Use the latest version applicable to your setup -->
+    </dependency>
+    <!-- SLF4J Simple Binding -->
+    <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-simple</artifactId>
+        <version>1.7.32</version> <!-- This version should match the SLF4J API version -->
+    </dependency>
+</dependencies>
 </project>
